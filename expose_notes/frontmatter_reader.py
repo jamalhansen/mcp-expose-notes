@@ -12,6 +12,21 @@ import re
 from datetime import datetime
 from pathlib import Path, PurePath
 from typing import Dict, List, Optional
+from pydantic import BaseModel
+
+class Note(BaseModel):
+    note_id: int
+    path: Optional[str]
+    title: Optional[str]
+    created: Optional[str]
+    description: Optional[str]
+
+class NoteSet(BaseModel):
+    generated_by: str
+    generated_on: str
+    directory: str
+    total_files: int
+    notes: List[Note]
 
 import frontmatter
 
@@ -22,22 +37,22 @@ def extract_title_from_path(path: Path) -> str:
     filename = Path(path.name).stem
     return re.sub(r'\s*[-_]\s*', ' ', filename).title()
 
-def parse_post(id, relative_path: Path, post: frontmatter.Post) -> Dict[str, Optional[str]]:
+def parse_note(id, path: Path, post: frontmatter.Post) -> Note:
     """Parse frontmatter post to extract relevant fields."""
-    title = post.get('title') or post.get('Title') or extract_title_from_path(relative_path)
+    title = post.get('title') or post.get('Title') or extract_title_from_path(path)
     created = post.get('Created') or post.get('created') or post.get('date') or post.get('Date')
 
-    return {
-        "id": id,
-        "relative_path": str(relative_path) or None,
-        "title": str(title) or None,
-        "created": created.isoformat() if isinstance(created, datetime) else str(created) if created else None,
-        "description": str(post.get('Description') or post.get('description') or post.get('Summary') or post.get('summary')) if (post.get('Description') or post.get('description') or post.get('Summary') or post.get('summary')) is not None else None
-    }
+    return Note(
+        note_id=id,
+        path=str(path) or None,
+        title=str(title) or None,
+        created=created.isoformat() if isinstance(created, datetime) else str(created) if created else None,
+        description=str(post.get('Description') or post.get('description') or post.get('Summary') or post.get('summary')) if (post.get('Description') or post.get('description') or post.get('Summary') or post.get('summary')) is not None else None
+    )
 
-def scan_markdown_files(directory: Path) -> List[Dict]:
+def scan_markdown_files(directory: Path) -> List[Note]:
     """Scan directory for markdown files and extract frontmatter data."""
-    results = []
+    notes = []
     
     # Find all markdown files
     markdown_files = list(directory.glob("*.md")) + list(directory.glob("*.markdown"))
@@ -49,23 +64,20 @@ def scan_markdown_files(directory: Path) -> List[Dict]:
             with open(file_path, 'r', encoding='utf-8') as f:
                 post = frontmatter.load(f)
             
-            # Extract relative path from the scan directory
-            relative_path = file_path.relative_to(directory)
-            
             # Build file metadata
-            file_data = parse_post(
+            file_data = parse_note(
                 id=i + 1,
-                relative_path=relative_path,
+                path=file_path,
                 post=post
             )
             
-            results.append(file_data)
+            notes.append(file_data)
             
         except Exception as e:
             print(f"  Error processing {file_path.name}: {e}")
             continue
     
-    return results
+    return notes
 
 
 def json_serializer(obj):
@@ -75,16 +87,25 @@ def json_serializer(obj):
     raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
 
 
-def save_summary_json(data: List[Dict], output_path: Path) -> None:
-    """Save the extracted data to summary.json."""
-    summary = {
-        "generated_by": "frontmatter_scanner.py",
-        "generated_on": datetime.now().isoformat(),
-        "directory": str(output_path.parent.resolve()),
-        "total_files": len(data),
-        "files": data
-    }
-    
+def build_note_summary(notes: List[Note], output_path: Path) -> NoteSet:
+    """Build the summary of notes."""
+    return NoteSet(
+        generated_by = "expose_notes",
+        generated_on = datetime.now().isoformat(),
+        directory = str(output_path.parent.resolve()),
+        total_files = len(notes),
+        notes = notes
+    )
+
+def build_summary(directory: Path) -> NoteSet:
+    """Build the summary of notes in the given directory."""
+    notes = scan_markdown_files(directory)
+    return build_note_summary(notes, directory / LLM_SUMMARY_FILENAME)
+
+def save_summary_json(notes: List[Note], output_path: Path) -> None:
+    """Save the summary of notes to a JSON file."""
+    summary = build_note_summary(notes, output_path)
+
     try:
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(summary, f, indent=2, ensure_ascii=False, default=json_serializer)

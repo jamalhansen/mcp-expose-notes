@@ -1,7 +1,7 @@
 from pathlib import Path
 from datetime import datetime
 from frontmatter import Post
-from expose_notes.frontmatter import parse_post, extract_title_from_path
+from expose_notes.frontmatter_reader import parse_note, extract_title_from_path
 
 def test_extract_title_from_filename():
     """
@@ -10,7 +10,7 @@ def test_extract_title_from_filename():
     path = Path("example_file.md")
     assert extract_title_from_path(path) == "Example File"
 
-def test_parse_post():
+def test_parse_note():
     """
     Test the parse_post function with a mock frontmatter post.
     """
@@ -25,10 +25,10 @@ def test_parse_post():
         **params
     )
 
-    result = parse_post(1, Path("test/example_file.md"), post)
+    note = parse_note(1, Path("test/example_file.md"), post)
     
-    assert result["id"] == 1
-    assert result["relative_path"] == "test/example_file.md"
-    assert result["title"] == "Test Title"
-    assert result["created"] == "2023-10-01T00:00:00"
-    assert result["description"] == "This is a test description."
+    assert note.note_id == 1
+    assert note.path == "test/example_file.md"
+    assert note.title == "Test Title"
+    assert note.created == "2023-10-01T00:00:00"
+    assert note.description == "This is a test description."
