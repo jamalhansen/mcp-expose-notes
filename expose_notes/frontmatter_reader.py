@@ -14,6 +14,8 @@ from pathlib import Path, PurePath
 from typing import Dict, List, Optional
 from pydantic import BaseModel
 
+from expose_notes.configuration import DailyNotesConfig
+
 class Note(BaseModel):
     note_id: int
     path: Optional[str]
@@ -24,7 +26,8 @@ class Note(BaseModel):
 class NoteSet(BaseModel):
     generated_by: str
     generated_on: str
-    directory: str
+    directory: str | None = None
+    daily_notes: bool = False
     total_files: int
     notes: List[Note]
 
@@ -87,7 +90,7 @@ def json_serializer(obj):
     raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
 
 
-def build_note_summary(notes: List[Note], output_path: Path) -> NoteSet:
+def build_note_set_for_notes(notes: List[Note], output_path: Path) -> NoteSet:
     """Build the summary of notes."""
     return NoteSet(
         generated_by = "expose_notes",
@@ -97,14 +100,14 @@ def build_note_summary(notes: List[Note], output_path: Path) -> NoteSet:
         notes = notes
     )
 
-def build_summary(directory: Path) -> NoteSet:
+def build_note_set_for_source(directory: Path) -> NoteSet:
     """Build the summary of notes in the given directory."""
     notes = scan_markdown_files(directory)
-    return build_note_summary(notes, directory / LLM_SUMMARY_FILENAME)
+    return build_note_set_for_notes(notes, directory / LLM_SUMMARY_FILENAME)
 
 def save_summary_json(notes: List[Note], output_path: Path) -> None:
     """Save the summary of notes to a JSON file."""
-    summary = build_note_summary(notes, output_path)
+    summary = build_note_set_for_notes(notes, output_path)
 
     try:
         with open(output_path, 'w', encoding='utf-8') as f:
